@@ -19,6 +19,7 @@ def train(name, epochs, batch_size, learning_rate):
     results_path = f"./results/{name}"
     Path(results_path).mkdir(parents=True, exist_ok=True)
     
+    print("Initializing dataset")
     cloud_dataset = Clouds("./data/stacked", "./data/gt")
     train_dataset, validation_dataset = random_split(cloud_dataset, [0.8, 0.2])
     
@@ -30,8 +31,7 @@ def train(name, epochs, batch_size, learning_rate):
     print(summary(cloud_model, (4, 384, 384)))
     print("\n")
     
-    sigm = nn.Sigmoid()
-    loss_BCE = nn.BCELoss()
+    criterion = nn.CrossEntropyLoss(weight=torch.tensor([0.44, 0.56]).to(device))
     optim = torch.optim.AdamW(cloud_model.parameters(), lr=learning_rate)
     
     train_loss = []
@@ -53,17 +53,16 @@ def train(name, epochs, batch_size, learning_rate):
         
         for stacked_img, gt_img in tqdm(train_dataloader, desc="Train"):            
             stacked_img = stacked_img.to(device)
-            gt_img = gt_img.to(device)
+            gt_img = gt_img.to(device).long()
 
             optim.zero_grad()
             output = cloud_model(stacked_img)
-            output = sigm(output).squeeze()
-            loss = loss_BCE(output, gt_img)
+            loss = criterion(output, gt_img)
             loss.backward()
             optim.step()
             
             running_loss += loss.item()
-            metrics_output = output.cpu().detach().numpy() > 0.5  # FIXME: hardcoded threshold
+            metrics_output = torch.argmax(output, dim=1).cpu().detach().numpy()
             metrics_gt = gt_img.cpu().detach().numpy()
             running_accuracy += accuracy(metrics_output, metrics_gt)
             running_iou += iou(metrics_output, metrics_gt)
@@ -73,14 +72,13 @@ def train(name, epochs, batch_size, learning_rate):
         with torch.no_grad():    
             for stacked_img, gt_img in tqdm(validation_dataloader, desc="Validation"):
                 stacked_img = stacked_img.to(device)
-                gt_img = gt_img.to(device)
+                gt_img = gt_img.to(device).long()
                 
                 output = cloud_model(stacked_img)
-                output = sigm(output).squeeze()
-                loss = loss_BCE(output, gt_img)
+                loss = criterion(output, gt_img)
                 
                 running_val_loss += loss.item()
-                metrics_output = output.cpu().detach().numpy() > 0.5  # FIXME: hardcoded threshold
+                metrics_output = torch.argmax(output, dim=1).cpu().detach().numpy()
                 metrics_gt = gt_img.cpu().detach().numpy()
                 running_val_acccuracy += accuracy(metrics_output, metrics_gt)
                 running_val_iou += iou(metrics_output, metrics_gt)
@@ -111,8 +109,8 @@ def train(name, epochs, batch_size, learning_rate):
 
 
 if __name__ == "__main__":
-    name = "Cloud_UNet"
+    name = "Cloud_UNet_2"
     epochs = 30
     batch_size = 4
-    learning_rate = 1e-5
+    learning_rate = 1e-4
     train(name, epochs, batch_size, learning_rate)

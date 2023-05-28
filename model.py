@@ -27,7 +27,7 @@ class CloudUnet(nn.Module):
         self.dconv_up2 = double_conv(128 + 256, 128)
         self.dconv_up1 = double_conv(128 + 64, 64)
         
-        self.conv_last = nn.Conv2d(64, 1, 1)
+        self.conv_last = nn.Conv2d(64, 2, 1)
         
         
     def forward(self, x):
