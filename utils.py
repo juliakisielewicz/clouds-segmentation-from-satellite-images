@@ -17,6 +17,10 @@ def accuracy(predicted, gt):
 def iou(predicted, gt):
     intersection = np.logical_and(gt, predicted)
     union = np.logical_or(gt, predicted)
+    
+    if not np.any(union):
+        return 0
+    
     iou_score = np.sum(intersection) / np.sum(union)
     return round(iou_score, 5)
 
