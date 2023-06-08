@@ -12,8 +12,8 @@ class Clouds(Dataset):
         self.stacked_files = sorted([os.path.join(stacked_path, file) for file in os.listdir(stacked_path)])
         self.gt_files = sorted([os.path.join(gt_path, file) for file in os.listdir(gt_path)])
         
-        self.stacked_files = self.stacked_files[:100]
-        self.gt_files = self.gt_files[:100]
+        # self.stacked_files = self.stacked_files[:100]
+        # self.gt_files = self.gt_files[:100]
         
         self.transforms = T.RandomChoice([
             T.RandomRotation((-180, 180)),
