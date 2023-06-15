@@ -16,33 +16,33 @@ from transformer import SegFormer
 torch.backends.cudnn.benchmark = True
 
 
-def cross_entropy_jaccard_loss(logits, true, eps=1e-7, num_classes=2, alpha=0.3):
-    """Computes the Jaccard loss, a.k.a the IoU loss.
+# def cross_entropy_jaccard_loss(logits, true, eps=1e-7, num_classes=2, alpha=1):
+#     """Computes the Jaccard loss, a.k.a the IoU loss.
 
-    Note that PyTorch optimizers minimize a loss. In this
-    case, we would like to maximize the jaccard loss so we
-    return the negated jaccard loss.
+#     Note that PyTorch optimizers minimize a loss. In this
+#     case, we would like to maximize the jaccard loss so we
+#     return the negated jaccard loss.
 
-    Args:
-        logits: a tensor of shape [B, C, H, W]. Corresponds to
-                the raw output or logits of the model.
-        true: a tensor of shape [B, H, W] or [B, 1, H, W].
-        eps: added to the denominator for numerical stability.
+#     Args:
+#         logits: a tensor of shape [B, C, H, W]. Corresponds to
+#                 the raw output or logits of the model.
+#         true: a tensor of shape [B, H, W] or [B, 1, H, W].
+#         eps: added to the denominator for numerical stability.
 
-    Returns:
-        jacc_loss: the Jaccard loss.
-    """
-    true_1_hot = torch.eye(num_classes).cuda()[true.squeeze(1)]
-    true_1_hot = true_1_hot.permute(0, 3, 1, 2).float()
-    probas = F.softmax(logits, dim=1).cuda()
-    true_1_hot = true_1_hot.type(logits.type())
-    dims = (0,) + tuple(range(2, true.ndimension()))
-    intersection = torch.sum(probas * true_1_hot, dims)
-    cardinality = torch.sum(probas + true_1_hot, dims)
-    union = cardinality - intersection
-    jacc_loss = (intersection / (union + eps)).mean()
-    cross_entropy = nn.functional.cross_entropy(logits, true)
-    return (1 - jacc_loss) + cross_entropy * alpha
+#     Returns:
+#         jacc_loss: the Jaccard loss.
+#     """
+#     true_1_hot = torch.eye(num_classes).cuda()[true.squeeze(1)]
+#     true_1_hot = true_1_hot.permute(0, 3, 1, 2).float()
+#     probas = F.softmax(logits, dim=1).cuda()
+#     true_1_hot = true_1_hot.type(logits.type())
+#     dims = (0,) + tuple(range(2, true.ndimension()))
+#     intersection = torch.sum(probas * true_1_hot, dims)
+#     cardinality = torch.sum(probas + true_1_hot, dims)
+#     union = cardinality - intersection
+#     jacc_loss = (intersection / (union + eps)).mean()
+#     cross_entropy = nn.functional.cross_entropy(logits, true)
+#     return (1 - jacc_loss) + cross_entropy**2
 
 
 def train(name, epochs, batch_size, learning_rate):
@@ -59,31 +59,32 @@ def train(name, epochs, batch_size, learning_rate):
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4, drop_last=True)
     validation_dataloader = DataLoader(validation_dataset, batch_size=batch_size, shuffle=False, num_workers=4, drop_last=True)
     
-    # model = CloudUnet().to(device)
-    model = SegFormer(
-        in_channels=4,
-        widths=[64, 128, 256, 512],
-        depths=[3, 4, 6, 3],
-        all_num_heads=[1, 2, 4, 8],
-        patch_sizes=[7, 3, 3, 3],
-        overlap_sizes=[4, 2, 2, 2],
-        reduction_ratios=[8, 4, 2, 1],
-        mlp_expansions=[4, 4, 4, 4],
-        decoder_channels=256,
-        scale_factors=[8, 4, 2, 1],
-        num_classes=2,
-        scale_factor=4
-    ).to(device)
+    model = CloudUnet().to(device)
+    # model = SegFormer(
+    #     in_channels=4,
+    #     widths=[64, 128, 256, 512],
+    #     depths=[3, 4, 6, 3],
+    #     all_num_heads=[1, 2, 4, 8],
+    #     patch_sizes=[7, 3, 3, 3],
+    #     overlap_sizes=[4, 2, 2, 2],
+    #     reduction_ratios=[8, 4, 2, 1],
+    #     mlp_expansions=[4, 4, 4, 4],
+    #     decoder_channels=256,
+    #     scale_factors=[8, 4, 2, 1],
+    #     num_classes=2,
+    #     scale_factor=4
+    # ).to(device)
     
     # print("Model:")
     # print(summary(model, input_size=(4, 384, 384), batch_size=-1, device="cuda"), "\n")
     # print(model, "\n")
     
+    criterion = nn.CrossEntropyLoss(weight=torch.tensor([0.44, 0.56]).to(device))
     jaccard = JaccardIndex(task="multiclass", num_classes=2).to(device)
     dice = Dice(average="macro", num_classes=2).to(device)
     accuracy = Accuracy(task="multiclass", num_classes=2).to(device)
     optim = torch.optim.AdamW(model.parameters(), lr=learning_rate)
-    scheduler = torch.optim.lr_scheduler.ExponentialLR(optim, gamma=0.95)
+    scheduler = torch.optim.lr_scheduler.ExponentialLR(optim, gamma=0.9)
     
     train_loss = []
     validation_loss = []
@@ -113,7 +114,7 @@ def train(name, epochs, batch_size, learning_rate):
 
             optim.zero_grad()
             output = model(stacked_img)
-            loss = cross_entropy_jaccard_loss(output, gt_img)
+            loss = criterion(output, gt_img)
             loss.backward()
             optim.step()
             
@@ -123,14 +124,14 @@ def train(name, epochs, batch_size, learning_rate):
             running_jaccard += jaccard(output, gt_img).cpu().numpy()
             
         model.eval()
-        
+           
         with torch.no_grad():    
             for stacked_img, gt_img in tqdm(validation_dataloader, desc="Validation"):
                 stacked_img = stacked_img.to(device)
                 gt_img = gt_img.to(device).long()
                 
                 output = model(stacked_img)
-                loss = cross_entropy_jaccard_loss(output, gt_img)
+                loss = criterion(output, gt_img)
                 
                 running_val_loss += loss.item()
                 running_val_acccuracy += accuracy(output, gt_img).cpu().numpy()
@@ -170,8 +171,8 @@ def train(name, epochs, batch_size, learning_rate):
 
 
 if __name__ == "__main__":
-    name = "segformer"
-    epochs = 30
+    name = "cloud-unet-no_transform"
+    epochs = 20
     batch_size = 4
-    learning_rate = 1e-4
+    learning_rate = 5e-2
     train(name, epochs, batch_size, learning_rate)
