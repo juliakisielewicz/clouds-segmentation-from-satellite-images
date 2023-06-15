@@ -30,8 +30,8 @@ def plot_comparison(input_image, predicted_segmentation, ground_truth_segmentati
 
     plt.tight_layout()
     # plt.show()
-    # fig.savefig(f"results/cloud-unet-2/segmentation_example_{idx}.png", bbox_inches="tight")
-    fig.savefig(f"results/segformer/segmentation_example_{idx}.png", bbox_inches="tight")
+    fig.savefig(f"results/cloud-unet-2/segmentation_example_{idx}.png", bbox_inches="tight")
+    # fig.savefig(f"results/segformer/segmentation_example_{idx}.png", bbox_inches="tight")
     plt.close()
 
 
@@ -39,23 +39,23 @@ def main():
     device = "cuda" if torch.cuda.is_available() else "cpu"
     cloud_dataset = Clouds("./data/stacked", "./data/gt")
     
-    # model = CloudUnet().to(device)
-    # checkpoint = torch.load("results/cloud-unet-2/cloud-unet-2_epoch_30.pt")
-    model = SegFormer(
-        in_channels=4,
-        widths=[64, 128, 256, 512],
-        depths=[3, 4, 6, 3],
-        all_num_heads=[1, 2, 4, 8],
-        patch_sizes=[7, 3, 3, 3],
-        overlap_sizes=[4, 2, 2, 2],
-        reduction_ratios=[8, 4, 2, 1],
-        mlp_expansions=[4, 4, 4, 4],
-        decoder_channels=256,
-        scale_factors=[8, 4, 2, 1],
-        num_classes=2,
-        scale_factor=4
-        ).to(device)
-    checkpoint = torch.load("results/segformer/segformer_epoch_17.pt")
+    model = CloudUnet().to(device)
+    checkpoint = torch.load("results/cloud-unet-2/cloud-unet-2_epoch_30.pt")
+    # model = SegFormer(
+    #     in_channels=4,
+    #     widths=[64, 128, 256, 512],
+    #     depths=[3, 4, 6, 3],
+    #     all_num_heads=[1, 2, 4, 8],
+    #     patch_sizes=[7, 3, 3, 3],
+    #     overlap_sizes=[4, 2, 2, 2],
+    #     reduction_ratios=[8, 4, 2, 1],
+    #     mlp_expansions=[4, 4, 4, 4],
+    #     decoder_channels=256,
+    #     scale_factors=[8, 4, 2, 1],
+    #     num_classes=2,
+    #     scale_factor=4
+    #     ).to(device)
+    # checkpoint = torch.load("results/segformer/segformer_epoch_17.pt")
     
     model.load_state_dict(checkpoint)
     model.eval()
@@ -71,7 +71,7 @@ def main():
             input_img = input_img.squeeze().cpu().numpy()
             gt = gt.squeeze().cpu().numpy()
             
-            plot_comparison(input_img[:3], gt, predicted_mask, idx)
+            plot_comparison(input_img[:3], predicted_mask, gt, idx)
             
             if idx >= 20:
                 break

@@ -12,8 +12,8 @@ class Clouds(Dataset):
         self.stacked_files = sorted([os.path.join(stacked_path, file) for file in os.listdir(stacked_path)])
         self.gt_files = sorted([os.path.join(gt_path, file) for file in os.listdir(gt_path)])
         
-        print(self.stacked_files[:20])
-        print(self.gt_files[:20])
+        # for s, g in zip(self.stacked_files[:20], self.gt_files[:20]):
+        #     print(s, g)
         
         # self.stacked_files = self.stacked_files[:100]
         # self.gt_files = self.gt_files[:100]
