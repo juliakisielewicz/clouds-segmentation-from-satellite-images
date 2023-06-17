@@ -1,79 +1,85 @@
 import os
 import torch
 import numpy as np
+from tqdm import tqdm
 import matplotlib.pyplot as plt
+import torchvision.transforms as T
+from torch.utils.data import DataLoader, random_split
 
 from dataset import Clouds
 from unet import CloudUnet
+from attunet import Attunet
+from resunet import ResUnet
 from transformer import SegFormer
 
 
-def plot_comparison(input_image, predicted_segmentation, ground_truth_segmentation, idx):
-    fig, axes = plt.subplots(1, 3, figsize=(12, 4))
-        
-    img = np.transpose(input_image, (1, 2, 0))
-    img[0] = (img[0] - np.min(img[0])) / (np.max(img[0]) - np.min(img[0]) + 0.000001)
-    img[1] = (img[1] - np.min(img[1])) / (np.max(img[1]) - np.min(img[1]) + 0.000001)
-    img[2] = (img[2] - np.min(img[2])) / (np.max(img[2]) - np.min(img[2]) + 0.000001)
+def plot_comparison(input_images, pred_segmentations, gt_segmentations, idx, folder_name, grid_len=4):
+    fig, axes = plt.subplots(grid_len, 3, figsize=(12, 4 * grid_len))
+    
+    for i, (input_image, pred_segmentation, gt_segmentation) in enumerate(zip(input_images, pred_segmentations, gt_segmentations)):
+        img = np.transpose(input_image[:3], (1, 2, 0))
+        img[0] = (img[0] - np.min(img[0])) / (np.max(img[0]) - np.min(img[0]) + 0.000001)
+        img[1] = (img[1] - np.min(img[1])) / (np.max(img[1]) - np.min(img[1]) + 0.000001)
+        img[2] = (img[2] - np.min(img[2])) / (np.max(img[2]) - np.min(img[2]) + 0.000001)
 
-    axes[0].imshow(img)
-    axes[0].set_title("Input Image")
-    axes[0].axis("off")
+        axes[i, 0].imshow(img)
+        axes[i, 0].axis("off")
 
-    axes[1].imshow(predicted_segmentation, cmap="gray")
-    axes[1].set_title("Predicted Segmentation")
-    axes[1].axis("off")
+        axes[i, 1].imshow(pred_segmentation, cmap="gray")
+        axes[i, 1].axis("off")
 
-    axes[2].imshow(ground_truth_segmentation, cmap="gray")
-    axes[2].set_title("Ground Truth Segmentation")
-    axes[2].axis("off")
+        axes[i, 2].imshow(gt_segmentation, cmap="gray")
+        axes[i, 2].axis("off")
 
+    axes[0, 0].set_title("Input Image")
+    axes[0, 1].set_title("Predicted Segmentation")
+    axes[0, 2].set_title("Ground Truth Segmentation")
+    
     plt.tight_layout()
-    # plt.show()
-    fig.savefig(f"results/cloud-unet-2/segmentation_example_{idx}.png", bbox_inches="tight")
-    # fig.savefig(f"results/segformer/segmentation_example_{idx}.png", bbox_inches="tight")
+    fig.savefig(f"results/{folder_name}/segmentation_example_{idx}.png", bbox_inches="tight")
     plt.close()
 
 
-def main():    
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    cloud_dataset = Clouds("./data/stacked", "./data/gt")
+def main():
+    batch_size = 4
+    nb_of_grid_plots = 10
+    folder_name = "cloud-attention-unet"
     
-    model = CloudUnet().to(device)
-    checkpoint = torch.load("results/cloud-unet-2/cloud-unet-2_epoch_30.pt")
-    # model = SegFormer(
-    #     in_channels=4,
-    #     widths=[64, 128, 256, 512],
-    #     depths=[3, 4, 6, 3],
-    #     all_num_heads=[1, 2, 4, 8],
-    #     patch_sizes=[7, 3, 3, 3],
-    #     overlap_sizes=[4, 2, 2, 2],
-    #     reduction_ratios=[8, 4, 2, 1],
-    #     mlp_expansions=[4, 4, 4, 4],
-    #     decoder_channels=256,
-    #     scale_factors=[8, 4, 2, 1],
-    #     num_classes=2,
-    #     scale_factor=4
-    #     ).to(device)
-    # checkpoint = torch.load("results/segformer/segformer_epoch_17.pt")
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    cloud_dataset = Clouds("./data/stacked", "./data/gt", augment=False)
+    _, validation_dataset = random_split(cloud_dataset, [0.8, 0.2], generator=torch.Generator().manual_seed(420))
+    
+    validation_dataloader = DataLoader(validation_dataset, batch_size=batch_size, shuffle=False)
+    
+    # model = CloudUnet().to(device)
+    model = Attunet(img_ch=4, output_ch=2).to(device)
+    # model = ResUnet(in_channels=4, num_classes=2).to(device)
+    
+    folder_path = f"results/{folder_name}"
+    print("Checkpoint:", sorted([i for i in os.listdir(folder_path) if '.pt' in i])[-1])
+    checkpoint = torch.load(f"{folder_path}/{sorted([i for i in os.listdir(folder_path) if '.pt' in i])[-1]}")
     
     model.load_state_dict(checkpoint)
     model.eval()
     
+    normalize = T.Normalize([0.2007, 0.1983, 0.2110, 0.2350], 
+                            [0.0658, 0.0631, 0.0661, 0.0673])
+    
     with torch.no_grad():
-        for idx, (input_img, gt) in enumerate(cloud_dataset):
-            input_img = input_img[None].to(device)
-            gt = gt[None].to(device)
+        for idx, (input_img, gt) in tqdm(enumerate(validation_dataloader), desc="Creating plots", total=nb_of_grid_plots):
+            input_img = input_img.to(device)
+            gt = gt.to(device)
             
-            predicted_mask = model(input_img)
-            
+            input_img_norm = normalize(input_img)
+            predicted_mask = model(input_img_norm)
             predicted_mask = torch.argmax(predicted_mask, dim=1).squeeze().cpu().numpy()
+            
             input_img = input_img.squeeze().cpu().numpy()
             gt = gt.squeeze().cpu().numpy()
             
-            plot_comparison(input_img[:3], predicted_mask, gt, idx)
+            plot_comparison(input_img, predicted_mask, gt, idx, folder_name, grid_len=batch_size)
             
-            if idx >= 20:
+            if idx >= nb_of_grid_plots:
                 break
 
 

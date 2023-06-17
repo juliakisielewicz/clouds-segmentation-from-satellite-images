@@ -3,46 +3,16 @@ import torch
 import torch.nn as nn
 from tqdm import tqdm
 from pathlib import Path
-import torch.nn.functional as F
-from torchsummary import summary
 from torch.utils.data import DataLoader, random_split
 from torchmetrics import Dice, JaccardIndex, Accuracy
 
 from dataset import Clouds
 from unet import CloudUnet
+from attunet import Attunet
+from resunet import ResUnet
 from utils import save_plots
-from transformer import SegFormer
 
 torch.backends.cudnn.benchmark = True
-
-
-# def cross_entropy_jaccard_loss(logits, true, eps=1e-7, num_classes=2, alpha=1):
-#     """Computes the Jaccard loss, a.k.a the IoU loss.
-
-#     Note that PyTorch optimizers minimize a loss. In this
-#     case, we would like to maximize the jaccard loss so we
-#     return the negated jaccard loss.
-
-#     Args:
-#         logits: a tensor of shape [B, C, H, W]. Corresponds to
-#                 the raw output or logits of the model.
-#         true: a tensor of shape [B, H, W] or [B, 1, H, W].
-#         eps: added to the denominator for numerical stability.
-
-#     Returns:
-#         jacc_loss: the Jaccard loss.
-#     """
-#     true_1_hot = torch.eye(num_classes).cuda()[true.squeeze(1)]
-#     true_1_hot = true_1_hot.permute(0, 3, 1, 2).float()
-#     probas = F.softmax(logits, dim=1).cuda()
-#     true_1_hot = true_1_hot.type(logits.type())
-#     dims = (0,) + tuple(range(2, true.ndimension()))
-#     intersection = torch.sum(probas * true_1_hot, dims)
-#     cardinality = torch.sum(probas + true_1_hot, dims)
-#     union = cardinality - intersection
-#     jacc_loss = (intersection / (union + eps)).mean()
-#     cross_entropy = nn.functional.cross_entropy(logits, true)
-#     return (1 - jacc_loss) + cross_entropy**2
 
 
 def train(name, epochs, batch_size, learning_rate):
@@ -54,12 +24,35 @@ def train(name, epochs, batch_size, learning_rate):
     
     print("Initializing dataset")
     cloud_dataset = Clouds("./data/stacked", "./data/gt")
-    train_dataset, validation_dataset = random_split(cloud_dataset, [0.8, 0.2])
+    train_dataset, validation_dataset = random_split(cloud_dataset, [0.8, 0.2], generator=torch.Generator().manual_seed(420))
     
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4, drop_last=True)
     validation_dataloader = DataLoader(validation_dataset, batch_size=batch_size, shuffle=False, num_workers=4, drop_last=True)
     
-    model = CloudUnet().to(device)
+    # # Precomputing mean and std of whole dataset to normalize images
+    # loader = DataLoader(cloud_dataset, batch_size=16, shuffle=True, num_workers=4, drop_last=True)
+    
+    # mean = 0.0
+    # for images, _ in tqdm(loader):
+    #     batch_samples = images.size(0) 
+    #     images = images.view(batch_samples, images.size(1), -1)
+    #     mean += images.mean(2).sum(0)
+    # mean = mean / len(loader.dataset)
+
+    # var = 0.0
+    # pixel_count = 0
+    # for images, _ in tqdm(loader):
+    #     batch_samples = images.size(0)
+    #     images = images.view(batch_samples, images.size(1), -1)
+    #     var += ((images - mean.unsqueeze(1))**2).sum([0,2])
+    #     pixel_count += images.nelement()
+    # std = torch.sqrt(var / pixel_count)
+    
+    # print(mean)
+    # print(std)
+    
+    # Different models to choose
+    # model = CloudUnet().to(device)
     # model = SegFormer(
     #     in_channels=4,
     #     widths=[64, 128, 256, 512],
@@ -74,12 +67,14 @@ def train(name, epochs, batch_size, learning_rate):
     #     num_classes=2,
     #     scale_factor=4
     # ).to(device)
+    model = Attunet(img_ch=4, output_ch=2).to(device)
+    # model = ResUnet(in_channels=4, num_classes=2).to(device)
     
-    # print("Model:")
-    # print(summary(model, input_size=(4, 384, 384), batch_size=-1, device="cuda"), "\n")
-    # print(model, "\n")
-    
-    criterion = nn.CrossEntropyLoss(weight=torch.tensor([0.44, 0.56]).to(device))
+    # FIXME: temp
+    checkpoint = torch.load("results/cloud-attention-unet/cloud-attention-unet_epoch_7.pt")
+    model.load_state_dict(checkpoint)
+        
+    criterion = nn.CrossEntropyLoss(weight=torch.tensor([0.4, 0.6]).to(device))
     jaccard = JaccardIndex(task="multiclass", num_classes=2).to(device)
     dice = Dice(average="macro", num_classes=2).to(device)
     accuracy = Accuracy(task="multiclass", num_classes=2).to(device)
@@ -171,8 +166,8 @@ def train(name, epochs, batch_size, learning_rate):
 
 
 if __name__ == "__main__":
-    name = "cloud-unet-no_transform"
+    name = "cloud-attention-unet"
     epochs = 20
-    batch_size = 4
-    learning_rate = 5e-2
+    batch_size = 2
+    learning_rate = 5e-4
     train(name, epochs, batch_size, learning_rate)
