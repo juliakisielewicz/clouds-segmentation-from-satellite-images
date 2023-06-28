@@ -31,9 +31,9 @@ def plot_comparison(input_images, pred_segmentations, gt_segmentations, idx, fol
         axes[i, 2].imshow(gt_segmentation, cmap="gray")
         axes[i, 2].axis("off")
 
-    axes[0, 0].set_title("Input Image")
-    axes[0, 1].set_title("Predicted Segmentation")
-    axes[0, 2].set_title("Ground Truth Segmentation")
+    axes[0, 0].set_title("Input Image", fontsize=20)
+    axes[0, 1].set_title("Predicted Segmentation", fontsize=20)
+    axes[0, 2].set_title("Ground Truth Segmentation", fontsize=20)
     
     plt.tight_layout()
     fig.savefig(f"results/{folder_name}/segmentation_example_{idx}.png", bbox_inches="tight")
@@ -41,9 +41,9 @@ def plot_comparison(input_images, pred_segmentations, gt_segmentations, idx, fol
 
 
 def main():
-    batch_size = 4
+    batch_size = 3
     nb_of_grid_plots = 10
-    folder_name = "cloud-attention-unet"
+    folder_name = "cloud-unet-final"
     
     device = "cuda" if torch.cuda.is_available() else "cpu"
     cloud_dataset = Clouds("./data/stacked", "./data/gt", augment=False)
@@ -51,8 +51,8 @@ def main():
     
     validation_dataloader = DataLoader(validation_dataset, batch_size=batch_size, shuffle=False)
     
-    # model = CloudUnet().to(device)
-    model = Attunet(img_ch=4, output_ch=2).to(device)
+    model = CloudUnet().to(device)
+    # model = Attunet(img_ch=4, output_ch=2).to(device)
     # model = ResUnet(in_channels=4, num_classes=2).to(device)
     
     folder_path = f"results/{folder_name}"
