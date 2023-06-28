@@ -56,23 +56,7 @@ def merge(img_dict, filename, patches_path, results_path, img_size=384):
     name = os.path.join(results_path, f"{filename}.jpeg")
     im.save(name)
     print(f"Saved {filename}")
-            
-#TODO trzeba wyłuskać te współrzedne ktore sa jakies dziwne 
-# zrobic array o wymiarach z tych wspolrzednych 
-# i na kazde miejsce w tym array wstawic array z całym obrazkiem
-
-
-# i jeszcze ogarnac wartosci tych metryk
-#architekture z resnet fote wstawic
-# sprawdzić na gicie najnowszy kod i hyperparameters stamtad
-
-#potem skleic duze obrazki w zestawienie w prezce
-
-#napisac wnioski
-
-#przejrzec kod zeby wiedzeic co to jest za projekt
-
-# wstawic jakies info do prezentacji (nie wiem jakis kod najlepszego modelu albo cokolwiek )            
+       
             
 if __name__ == "__main__":
     patches_path = "./results/validation"
